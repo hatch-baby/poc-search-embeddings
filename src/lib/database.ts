@@ -107,7 +107,7 @@ export async function upsertEmbedding(params: {
  * @param contentType - Optional filter by content type
  * @returns Array of embeddings
  */
-export async function getAllEmbeddings(contentType?: ContentType): Promise<ContentEmbedding[]> {
+export async function fetchAllEmbeddings(contentType?: ContentType): Promise<ContentEmbedding[]> {
   await loadCache();
 
   const allEmbeddings = Array.from(memoryStore.values());
