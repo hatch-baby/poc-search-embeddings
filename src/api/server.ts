@@ -86,16 +86,10 @@ console.log('║   Embedding Search API Server          ║');
 console.log('╚════════════════════════════════════════╝');
 console.log('');
 console.log(`Environment: ${isDevelopment ? 'development' : 'production'}`);
+console.log(`Storage: JSON file (.embeddings-cache.json)`);
 
 // Validate required environment variables
-const storageMode = process.env.STORAGE_MODE || 'postgres';
-console.log(`Storage mode: ${storageMode}`);
-
 const requiredEnvVars = ['VOYAGEAI_API_KEY'];
-// Only require DATABASE_URL if using postgres mode
-if (storageMode === 'postgres') {
-  requiredEnvVars.push('DATABASE_URL');
-}
 
 const missingEnvVars = requiredEnvVars.filter(key => !process.env[key]);
 
@@ -103,6 +97,8 @@ if (missingEnvVars.length > 0) {
   console.error('\n❌ Missing required environment variables:');
   missingEnvVars.forEach(key => console.error(`   - ${key}`));
   console.error('\nPlease create a .env file with the required variables.\n');
+  console.error('Note: The demo includes pre-cached embeddings, so you can');
+  console.error('skip this if you just want to try the search with existing data!\n');
   process.exit(1);
 }
 

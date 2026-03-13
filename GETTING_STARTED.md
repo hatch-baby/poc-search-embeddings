@@ -1,35 +1,35 @@
 # Getting Started
 
-Welcome! This guide will help you set up the embedding search system step by step.
+Welcome! This guide will help you try the embedding search demo in just a few minutes.
 
-## Prerequisites
+## No Setup Required!
 
-You need:
-- [Bun](https://bun.sh) installed on your computer
-- A Contentful account with API access
-- A VoyageAI API key
+This repo includes pre-cached embeddings, so you can try it **immediately** without any API keys or database setup.
 
-## Step 1: Get Your API Keys
+## Step 1: Install Bun
 
-### Contentful API Key
-1. Log in to Contentful
-2. Go to Settings → API keys
-3. Copy your Space ID and Content Delivery API access token
+Bun is a fast JavaScript runtime. If you don't have it:
 
-### VoyageAI API Key
-1. Sign up at [VoyageAI](https://www.voyageai.com)
-2. Get your API key from the dashboard
+**macOS/Linux:**
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
 
-## Step 2: Setup Environment
+**Windows:**
+```bash
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
 
-1. Create a `.env` file in the project root
-2. Add your keys:
+Check it worked:
+```bash
+bun --version
+```
+
+## Step 2: Get the Code
 
 ```bash
-CONTENTFUL_SPACE_ID=your_space_id_here
-CONTENTFUL_ACCESS_TOKEN=your_token_here
-VOYAGEAI_API_KEY=your_voyage_key_here
-STORAGE_MODE=memory
+git clone https://github.com/hatch-baby/poc-search-embeddings.git
+cd poc-search-embeddings
 ```
 
 ## Step 3: Install Dependencies
@@ -38,78 +38,125 @@ STORAGE_MODE=memory
 bun install
 ```
 
-## Step 4: Preview the Setup
+This takes about 10 seconds.
 
-Want to see what will happen first? Run a preview:
-
-```bash
-bun run setup:preview
-```
-
-This shows what will be processed without making any changes.
-
-## Step 5: Run the Setup
-
-Ready to go? This will:
-- Load content from Contentful
-- Generate AI embeddings
-- Save them for searching
-
-```bash
-bun run setup
-```
-
-⏱️ This takes about 1-2 minutes for ~300 items.
-
-## Step 6: Start the Server
+## Step 4: Start the Server
 
 ```bash
 bun run server
 ```
 
-The server will start at http://localhost:3000
+You should see:
+```
+╔════════════════════════════════════════╗
+║   Embedding Search API Server          ║
+╚════════════════════════════════════════╝
 
-## Step 7: Try a Search
+✅ Server is running!
 
-Open a new terminal (keep the server running) and try:
+🌐 URL: http://localhost:3000
+```
+
+## Step 5: Try Searching
+
+Open a **new terminal** (keep the server running) and run:
 
 ```bash
 bun run search
 ```
 
-Type a search query like "ocean sounds" or "bedtime stories" and see the results!
+Try searching for:
+- `ocean sounds`
+- `bedtime stories`
+- `relaxing music`
+- `focus and concentration`
+
+The search uses AI to understand meaning, not just keywords!
+
+## That's It!
+
+You just tried semantic search with AI embeddings. No API keys, no database setup required.
+
+## Want to Regenerate Embeddings?
+
+If you want to generate fresh embeddings with your own Contentful data:
+
+### 1. Get API Keys
+
+**Contentful:**
+1. Log in to Contentful
+2. Go to Settings → API keys
+3. Copy your Space ID and Content Delivery API access token
+
+**VoyageAI:**
+1. Sign up at [VoyageAI](https://www.voyageai.com)
+2. Get your API key from the dashboard
+
+### 2. Create .env File
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your keys:
+```bash
+CONTENTFUL_SPACE_ID=your_space_id
+CONTENTFUL_ACCESS_TOKEN=your_token
+VOYAGEAI_API_KEY=your_voyage_key
+```
+
+### 3. Preview First
+
+```bash
+bun run setup:preview
+```
+
+This shows what will happen without making changes.
+
+### 4. Generate Embeddings
+
+```bash
+bun run setup
+```
+
+This takes about 1-2 minutes for ~300 items and costs less than $0.01.
+
+### 5. Done!
+
+The new embeddings are saved to `.embeddings-cache.json` and you can search right away:
+
+```bash
+bun run server    # In one terminal
+bun run search    # In another terminal
+```
 
 ## Common Commands
 
 | Command | What it does |
 |---------|-------------|
-| `bun run setup` | Set up embeddings (do this first) |
-| `bun run setup:preview` | Preview what will be processed |
-| `bun run setup:refresh` | Re-fetch data from Contentful |
-| `bun run server` | Start the search server |
-| `bun run search` | Try searching (server must be running) |
+| `bun run server` | Start the search API |
+| `bun run search` | Try searching interactively |
+| `bun run setup:preview` | Preview what will be generated |
+| `bun run setup` | Generate new embeddings |
+| `bun run setup:refresh` | Re-fetch from Contentful |
 
 ## Troubleshooting
 
-### "Missing required environment variables"
-- Check your `.env` file exists
-- Make sure all keys are filled in
-- No quotes around the values needed
+### Port 3000 already in use
 
-### "Failed to fetch from Contentful"
-- Check your Contentful API keys
-- Make sure your Space ID is correct
-- Verify your access token has read permissions
+Change the port by creating a `.env` file:
+```bash
+PORT=3001
+```
 
-### "VoyageAI error"
-- Check your VoyageAI API key
-- Make sure you have credits available
+### "Command not found: bun"
+
+Install Bun first (see Step 1 above).
 
 ### Search returns no results
-- Make sure you ran `bun run setup` first
-- Check that the setup completed without errors
-- Try running `bun run setup:refresh` to get fresh data
+
+Make sure the server is running in another terminal window.
 
 ## Need Help?
 
-If you're stuck, you can use Claude Code to help! See README.md for a prompt you can use.
+Use the Claude Code prompt in the README to get AI assistance with setup!

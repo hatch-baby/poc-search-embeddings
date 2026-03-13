@@ -28,6 +28,11 @@ interface SyncConfig {
 }
 
 /**
+ * Note: Embeddings are stored in .embeddings-cache.json
+ * No database setup required!
+ */
+
+/**
  * Sync statistics
  */
 interface SyncStats {
