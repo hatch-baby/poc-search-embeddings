@@ -3,6 +3,13 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "sync": "bun src/sync/generate-embeddings.ts",
+    "sync:dry-run": "bun src/sync/generate-embeddings.ts --dry-run",
+    "dev": "bun --hot src/api/server.ts",
+    "start": "NODE_ENV=production bun src/api/server.ts",
+    "test-search": "bun scripts/test-search.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
