@@ -11,10 +11,11 @@ If you have Claude Code, copy and paste this prompt to get assistance:
 ```
 I need help setting up this embedding search project. Please:
 
-1. Check if I have Bun installed (if not, tell me how to install it)
-2. Walk me through installing dependencies with "bun install"
-3. Start the server with "bun run server"
-4. Show me how to test it with "bun run search"
+1. Check if I already have this repo cloned (if not, help me clone it from https://github.com/hatch-baby/poc-search-embeddings.git)
+2. Check if I have Bun installed (if not, tell me how to install it)
+3. Walk me through installing dependencies with "bun install"
+4. Start the server with "bun run server"
+5. Show me how to test it with "bun run search"
 
 Go step by step, explain what each command does in simple terms, and check for errors along the way. Don't assume I know anything about terminal commands - explain everything clearly!
 ```
