@@ -39,6 +39,22 @@ export interface ContentfulItem {
     audioType?: string;
     [key: string]: any;
   };
+  metadata?: {
+    tags?: Array<{
+      sys: {
+        type: string;
+        linkType: string;
+        id: string;
+      };
+    }>;
+    concepts?: Array<{
+      sys: {
+        type: string;
+        linkType: string;
+        id: string;
+      };
+    }>;
+  };
 }
 
 /**
@@ -52,7 +68,11 @@ export interface ContentItem {
   category?: string;
   tags?: string[];
   filterNames?: string[];
+  taxonomyConcepts?: string[];
   audioType?: string;
+  narrator?: string;
+  tagline?: string;
+  about?: string;
   metadata: Record<string, any>;
 }
 
@@ -128,6 +148,19 @@ export interface ContentfulResponse {
   total: number;
   skip: number;
   limit: number;
+  includes?: {
+    Entry?: Array<{
+      sys: {
+        id: string;
+        contentType: {
+          sys: {
+            id: string;
+          };
+        };
+      };
+      fields: Record<string, any>;
+    }>;
+  };
 }
 
 /**

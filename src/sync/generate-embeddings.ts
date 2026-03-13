@@ -5,9 +5,10 @@
  * and stores them in PostgreSQL for semantic search.
  *
  * Usage:
- *   bun src/sync/generate-embeddings.ts                  # Full sync
- *   bun src/sync/generate-embeddings.ts --dry-run        # Preview only
- *   bun src/sync/generate-embeddings.ts --limit 50       # Process only first 50 items
+ *   bun src/sync/generate-embeddings.ts                       # Full sync (uses cached Contentful data)
+ *   bun src/sync/generate-embeddings.ts --dry-run             # Preview only
+ *   bun src/sync/generate-embeddings.ts --limit 50            # Process only first 50 items
+ *   bun src/sync/generate-embeddings.ts --refresh-contentful  # Force refresh Contentful data
  *   bun src/sync/generate-embeddings.ts --limit 50 --dry-run  # Test with 50 items (no API calls)
  */
 
@@ -21,6 +22,7 @@ import type { ContentItem } from '../types/index.js';
  */
 interface SyncConfig {
   dryRun: boolean;
+  refreshContentful: boolean; // Force refresh Contentful data instead of using cache
   progressInterval: number; // Show progress every N items
   limit?: number; // Limit total items to process (for testing)
 }
@@ -46,6 +48,7 @@ interface SyncStats {
 function parseArgs(): SyncConfig {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
+  const refreshContentful = args.includes('--refresh-contentful');
 
   // Parse --limit flag
   let limit: number | undefined;
@@ -60,6 +63,7 @@ function parseArgs(): SyncConfig {
 
   return {
     dryRun,
+    refreshContentful,
     progressInterval: 10, // Update progress every 10 items
     limit
   };
@@ -156,25 +160,46 @@ async function sync(): Promise<void> {
   };
 
   console.log('');
-  console.log('========================================');
-  console.log('  Embedding Generation Sync');
-  console.log('========================================');
+  console.log('╔════════════════════════════════════════╗');
+  console.log('║   Embedding Search POC - Setup         ║');
+  console.log('╚════════════════════════════════════════╝');
+  console.log('');
+  console.log('This will:');
+  console.log('  1. Load content from Contentful');
+  console.log('  2. Generate AI embeddings with VoyageAI');
+  console.log('  3. Store them for semantic search');
   console.log('');
 
   if (config.dryRun) {
-    console.log('[DRY RUN MODE - No data will be stored]');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('  PREVIEW MODE - No changes will be made');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('');
   }
 
   // Step 1: Fetch content from Contentful
-  console.log('Fetching content from Contentful (filtered for Hatch Sleep Clock)...');
+  console.log('📦 STEP 1: Loading content...');
+  console.log('');
+  if (config.refreshContentful) {
+    console.log('   Fetching fresh data from Contentful...');
+    console.log('   (This may take a moment)');
+  } else {
+    console.log('   Checking for cached data...');
+  }
 
   let sounds: ContentItem[];
   let channels: ContentItem[];
   let tracks: ContentItem[];
 
   try {
-    const contentData = await fetchAllContent();
+    const contentData = await fetchAllContent(
+      1000, // soundLimit
+      1000, // channelLimit
+      1000, // trackLimit
+      undefined, // deviceId (use default)
+      false, // includeChannelTracks
+      config.refreshContentful // forceRefresh
+    );
     sounds = contentData.sounds;
     channels = contentData.channels;
     tracks = contentData.tracks;
@@ -183,8 +208,8 @@ async function sync(): Promise<void> {
     stats.tracksCount = tracks.length;
     stats.totalItems = contentData.total;
 
-    console.log(`Found ${stats.totalItems} items (${stats.soundsCount} sounds, ${stats.channelsCount} channels, ${stats.tracksCount} tracks)`);
     console.log('');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   } catch (error) {
     console.error('Failed to fetch content from Contentful:');
     console.error(error instanceof Error ? error.message : String(error));
@@ -211,8 +236,11 @@ async function sync(): Promise<void> {
   const allTexts = allItems.map(item => buildEmbeddingText(item));
   const estimatedTotalCost = estimateCost(allTexts);
 
-  console.log('Generating embeddings...');
-  console.log(`Estimated total cost: $${estimatedTotalCost.toFixed(4)}`);
+  console.log('');
+  console.log('🤖 STEP 2: Generating AI embeddings...');
+  console.log('');
+  console.log(`   Processing ${stats.totalItems} items`);
+  console.log(`   Estimated cost: $${estimatedTotalCost.toFixed(4)}`);
   console.log('');
 
   // Step 3: Process items in batches
@@ -293,20 +321,40 @@ async function sync(): Promise<void> {
   console.log('');
 
   // Step 4: Display summary
-  console.log('========================================');
-  console.log('  Sync Complete');
-  console.log('========================================');
   console.log('');
-  console.log(`Duration: ${durationSeconds}s`);
-  console.log(`Processed: ${stats.totalItems} items`);
-  console.log(`  - Sounds: ${stats.soundsCount}`);
-  console.log(`  - Channels: ${stats.channelsCount}`);
-  console.log(`  - Tracks: ${stats.tracksCount}`);
+  console.log('╔════════════════════════════════════════╗');
+  console.log('║   ✨ Setup Complete!                   ║');
+  console.log('╚════════════════════════════════════════╝');
   console.log('');
-  console.log(`Embeddings: ${stats.embeddingsGenerated} ${config.dryRun ? 'estimated' : 'generated'}`);
-  console.log(`Total Cost: $${stats.totalCost.toFixed(4)}`);
-  console.log(`Errors: ${stats.errors}`);
+  console.log(`⏱️  Duration: ${durationSeconds}s`);
+  console.log(`📊 Processed: ${stats.totalItems} items`);
+  console.log(`   • ${stats.soundsCount} sounds`);
+  console.log(`   • ${stats.channelsCount} channels`);
+  console.log(`   • ${stats.tracksCount} tracks`);
   console.log('');
+  console.log(`🤖 Embeddings: ${stats.embeddingsGenerated} ${config.dryRun ? 'would be created' : 'created'}`);
+  console.log(`💰 Total Cost: $${stats.totalCost.toFixed(4)}`);
+  if (stats.errors > 0) {
+    console.log(`⚠️  Errors: ${stats.errors}`);
+  } else {
+    console.log(`✅ No errors`);
+  }
+  console.log('');
+
+  if (!config.dryRun && stats.errors === 0) {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('  Next steps:');
+    console.log('  1. Start the server: bun run server');
+    console.log('  2. Try a search: bun run search');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+  } else if (config.dryRun) {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('  This was a preview. To actually setup:');
+    console.log('  Run: bun run setup');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('');
+  }
 
   // Display errors if any
   if (errors.length > 0) {

@@ -15,6 +15,7 @@ import type {
 } from '../types/index.js';
 
 const CONTENTFUL_API_URL = 'https://cdn.contentful.com';
+const CONTENTFUL_CACHE_FILE = '.contentful-cache.json';
 
 /**
  * Contentful client configuration
@@ -51,6 +52,123 @@ function getConfig(): ContentfulConfig {
 }
 
 /**
+ * Taxonomy concepts cache
+ * Maps concept ID (e.g., "acoustic") to label (e.g., "Acoustic")
+ */
+let taxonomyCache: Map<string, string> | null = null;
+
+/**
+ * Contentful data cache
+ */
+interface ContentfulCache {
+  sounds: ContentItem[];
+  channels: ContentItem[];
+  tracks: ContentItem[];
+  total: number;
+  cachedAt: string;
+  deviceId: string;
+}
+
+/**
+ * Load Contentful cache from file
+ */
+async function loadContentfulCache(deviceId: string): Promise<ContentfulCache | null> {
+  try {
+    const file = Bun.file(CONTENTFUL_CACHE_FILE);
+    if (await file.exists()) {
+      const cache = await file.json() as ContentfulCache;
+      // Verify cache is for the same device
+      if (cache.deviceId === deviceId) {
+        const cachedDate = new Date(cache.cachedAt);
+        const timeAgo = Math.round((Date.now() - cachedDate.getTime()) / 1000 / 60); // minutes ago
+        console.log(`   ✓ Using cached data (saved ${timeAgo} minutes ago)`);
+        console.log(`   ✓ Found ${cache.total} items`);
+        console.log('');
+        return cache;
+      } else {
+        console.log(`   ⚠ Cache device mismatch - fetching fresh data`);
+      }
+    }
+  } catch (error) {
+    console.warn('   ⚠ Failed to load cache:', error);
+  }
+  return null;
+}
+
+/**
+ * Save Contentful cache to file
+ */
+async function saveContentfulCache(
+  sounds: ContentItem[],
+  channels: ContentItem[],
+  tracks: ContentItem[],
+  deviceId: string
+): Promise<void> {
+  try {
+    const cache: ContentfulCache = {
+      sounds,
+      channels,
+      tracks,
+      total: sounds.length + channels.length + tracks.length,
+      cachedAt: new Date().toISOString(),
+      deviceId
+    };
+    await Bun.write(CONTENTFUL_CACHE_FILE, JSON.stringify(cache, null, 2));
+    console.log(`   ✓ Saved to cache for faster future runs`);
+    console.log('');
+  } catch (error) {
+    console.warn('   ⚠ Failed to save cache:', error);
+  }
+}
+
+/**
+ * Fetch taxonomy concepts and build ID-to-label mapping
+ * Results are cached after first fetch
+ */
+async function getTaxonomyConcepts(): Promise<Map<string, string>> {
+  if (taxonomyCache) {
+    return taxonomyCache;
+  }
+
+  const config = getConfig();
+  const url = `${CONTENTFUL_API_URL}/spaces/${config.spaceId}/environments/${config.environment}/taxonomy/concepts`;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${config.accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn(`Failed to fetch taxonomy concepts: ${response.status}`);
+      taxonomyCache = new Map();
+      return taxonomyCache;
+    }
+
+    const data = await response.json();
+    taxonomyCache = new Map();
+
+    if (data.items && Array.isArray(data.items)) {
+      data.items.forEach((concept: any) => {
+        const id = concept.sys?.id;
+        const label = concept.prefLabel?.['en-US'];
+        if (id && label) {
+          taxonomyCache!.set(id, label);
+        }
+      });
+    }
+
+    return taxonomyCache;
+  } catch (error) {
+    console.warn('Error fetching taxonomy concepts:', error);
+    taxonomyCache = new Map();
+    return taxonomyCache;
+  }
+}
+
+/**
  * Fetch entries from Contentful
  *
  * @param contentType - Type of content to fetch ('sound', 'channel', or 'track')
@@ -74,7 +192,7 @@ async function fetchEntries(
   url.searchParams.set('content_type', contentType);
   url.searchParams.set('limit', Math.min(limit, 1000).toString());
   url.searchParams.set('skip', skip.toString());
-  url.searchParams.set('include', '0'); // Don't resolve linked fields (avoid "too many links" error)
+  url.searchParams.set('include', '1'); // Resolve one level of linked fields (for filters)
 
   // Device filter: only fetch content for specific device
   // Uses sys.id matching for linked entries
@@ -111,9 +229,15 @@ async function fetchEntries(
  * Transform raw Contentful item to ContentItem
  *
  * @param item - Raw Contentful item
+ * @param includes - Included linked entries from Contentful response
+ * @param taxonomyMap - Optional taxonomy concepts mapping (if already loaded)
  * @returns Processed ContentItem
  */
-function transformItem(item: ContentfulItem): ContentItem {
+async function transformItem(
+  item: ContentfulItem,
+  includes?: ContentfulResponse['includes'],
+  taxonomyMap?: Map<string, string>
+): Promise<ContentItem> {
   const contentfulId = item.sys.id;
   const contentTypeId = item.sys.contentType.sys.id;
 
@@ -135,17 +259,52 @@ function transformItem(item: ContentfulItem): ContentItem {
 
   const fields = item.fields;
 
-  // Extract filter names from linked filters (if resolved)
-  // Note: With include:0, filters will be references, not full objects
-  const filterNames: string[] = [];
-  if (fields.filters && Array.isArray(fields.filters)) {
-    fields.filters.forEach(filter => {
-      // Check if filter is a resolved object with fields
-      if (filter && typeof filter === 'object' && 'fields' in filter && filter.fields?.name) {
-        filterNames.push(filter.fields.name);
+  // Load taxonomy concepts if not already provided
+  if (!taxonomyMap) {
+    taxonomyMap = await getTaxonomyConcepts();
+  }
+
+  // Extract taxonomy concepts from metadata.concepts
+  const taxonomyConcepts: string[] = [];
+  if (item.metadata?.concepts && Array.isArray(item.metadata.concepts)) {
+    item.metadata.concepts.forEach(conceptRef => {
+      const conceptId = conceptRef.sys?.id;
+      if (conceptId) {
+        const label = taxonomyMap!.get(conceptId);
+        if (label) {
+          taxonomyConcepts.push(label);
+        }
       }
     });
   }
+
+  // Extract filter titles from linked filters (resolved with include:1)
+  // These are custom filter entries (e.g., "Nature Sounds", "Sound Baths")
+  const filterNames: string[] = [];
+  if (fields.filters && Array.isArray(fields.filters)) {
+    fields.filters.forEach(filter => {
+      // Check if filter is a link reference (sys.id)
+      if (filter && typeof filter === 'object' && 'sys' in filter && (filter as any).sys?.id) {
+        const filterId = (filter as any).sys.id;
+        // Look up the filter in includes
+        const includedFilter = includes?.Entry?.find(entry =>
+          entry.sys.id === filterId && entry.sys.contentType.sys.id === 'filter'
+        );
+        if (includedFilter?.fields?.title) {
+          filterNames.push(includedFilter.fields.title);
+        }
+      }
+      // Also check if filter is a fully resolved object (backwards compatibility)
+      else if (filter && typeof filter === 'object' && 'fields' in filter && (filter as any).fields?.title) {
+        filterNames.push((filter as any).fields.title);
+      }
+    });
+  }
+
+  // Extract additional metadata fields
+  const narrator = fields.narrator || undefined;
+  const tagline = fields.tagline || undefined;
+  const about = fields.about || undefined;
 
   // Build metadata object
   const metadata: Record<string, any> = {
@@ -153,12 +312,16 @@ function transformItem(item: ContentfulItem): ContentItem {
     category: fields.category || '',
     tags: fields.tags || [],
     filterNames: filterNames,
-    audioType: fields.audioType || ''
+    taxonomyConcepts: taxonomyConcepts,
+    audioType: fields.audioType || '',
+    narrator: narrator || '',
+    tagline: tagline || '',
+    about: about || ''
   };
 
   // Add any additional fields to metadata
   Object.keys(fields).forEach(key => {
-    if (!['title', 'description', 'category', 'tags', 'filters', 'audioType'].includes(key)) {
+    if (!['title', 'description', 'category', 'tags', 'filters', 'audioType', 'narrator', 'tagline', 'about'].includes(key)) {
       metadata[key] = fields[key];
     }
   });
@@ -171,7 +334,11 @@ function transformItem(item: ContentfulItem): ContentItem {
     category: fields.category,
     tags: fields.tags,
     filterNames,
+    taxonomyConcepts,
     audioType: fields.audioType,
+    narrator,
+    tagline,
+    about,
     metadata
   };
 }
@@ -194,7 +361,8 @@ const HATCH_SLEEP_CLOCK_ID = '2wqv63kTT78cCVfAsyCtat';
  */
 export async function fetchSounds(limit: number = 1000, deviceId: string = HATCH_SLEEP_CLOCK_ID): Promise<ContentItem[]> {
   const response = await fetchEntries('sound', limit, 0, deviceId);
-  return response.items.map(transformItem);
+  const taxonomyMap = await getTaxonomyConcepts();
+  return Promise.all(response.items.map(item => transformItem(item, response.includes, taxonomyMap)));
 }
 
 /**
@@ -212,7 +380,8 @@ export async function fetchSounds(limit: number = 1000, deviceId: string = HATCH
  */
 export async function fetchChannels(limit: number = 1000, deviceId: string = HATCH_SLEEP_CLOCK_ID): Promise<ContentItem[]> {
   const response = await fetchEntries('channel', limit, 0, deviceId);
-  return response.items.map(transformItem);
+  const taxonomyMap = await getTaxonomyConcepts();
+  return Promise.all(response.items.map(item => transformItem(item, response.includes, taxonomyMap)));
 }
 
 /**
@@ -233,7 +402,8 @@ export async function fetchChannels(limit: number = 1000, deviceId: string = HAT
  */
 export async function fetchTracks(limit: number = 1000, deviceId: string = HATCH_SLEEP_CLOCK_ID): Promise<ContentItem[]> {
   const response = await fetchEntries('track', limit, 0, deviceId);
-  return response.items.map(transformItem);
+  const taxonomyMap = await getTaxonomyConcepts();
+  return Promise.all(response.items.map(item => transformItem(item, response.includes, taxonomyMap)));
 }
 
 /**
@@ -241,21 +411,23 @@ export async function fetchTracks(limit: number = 1000, deviceId: string = HATCH
  *
  * Filters for Hatch Sleep Clock device by default.
  * Automatically excludes tracks that belong to channels.
+ * Uses cached data if available unless forceRefresh is true.
  *
  * @param soundLimit - Maximum number of sounds to fetch (default: 1000)
  * @param channelLimit - Maximum number of channels to fetch (default: 1000)
  * @param trackLimit - Maximum number of tracks to fetch (default: 1000)
  * @param deviceId - Device entry ID to filter by (defaults to Hatch Sleep Clock)
  * @param includeChannelTracks - If true, includes tracks that belong to channels (default: false)
+ * @param forceRefresh - If true, bypasses cache and fetches fresh data (default: false)
  * @returns Object containing arrays of sounds, channels, and standalone tracks
  *
  * @example
  * ```typescript
+ * // Use cached data if available
  * const { sounds, channels, tracks, total } = await fetchAllContent();
- * console.log(`Fetched ${total} items for Hatch Sleep Clock`);
- * console.log(`  - Sounds: ${sounds.length}`);
- * console.log(`  - Channels: ${channels.length}`);
- * console.log(`  - Standalone tracks: ${tracks.length}`);
+ *
+ * // Force refresh from Contentful
+ * const freshData = await fetchAllContent(1000, 1000, 1000, undefined, false, true);
  * ```
  */
 export async function fetchAllContent(
@@ -263,8 +435,23 @@ export async function fetchAllContent(
   channelLimit: number = 1000,
   trackLimit: number = 1000,
   deviceId: string = HATCH_SLEEP_CLOCK_ID,
-  includeChannelTracks: boolean = false
+  includeChannelTracks: boolean = false,
+  forceRefresh: boolean = false
 ): Promise<{ sounds: ContentItem[]; channels: ContentItem[]; tracks: ContentItem[]; total: number }> {
+  // Check cache first unless forceRefresh is true
+  if (!forceRefresh) {
+    const cached = await loadContentfulCache(deviceId);
+    if (cached) {
+      return {
+        sounds: cached.sounds,
+        channels: cached.channels,
+        tracks: cached.tracks,
+        total: cached.total
+      };
+    }
+  }
+
+  console.log('   Fetching fresh data from Contentful API...');
   // Fetch all three types in parallel for efficiency
   const [sounds, channelsResponse, allTracks] = await Promise.all([
     fetchSounds(soundLimit, deviceId),
@@ -301,10 +488,13 @@ export async function fetchAllContent(
     excludedCount = beforeCount - tracks.length;
   }
 
-  console.log(`Device filter: Hatch Sleep Clock (${deviceId})`);
-  console.log(`  - Sounds: ${sounds.length}`);
-  console.log(`  - Channels: ${channelsResponse.length}`);
-  console.log(`  - Tracks: ${tracks.length} standalone${excludedCount > 0 ? ` (${excludedCount} channel tracks excluded)` : ''}`);
+  console.log(`   ✓ Loaded content for: Hatch Sleep Clock`);
+  console.log(`   ✓ Sounds: ${sounds.length}`);
+  console.log(`   ✓ Channels: ${channelsResponse.length}`);
+  console.log(`   ✓ Tracks: ${tracks.length} standalone${excludedCount > 0 ? ` (${excludedCount} in channels excluded)` : ''}`);
+
+  // Save to cache for future use
+  await saveContentfulCache(sounds, channelsResponse, tracks, deviceId);
 
   return {
     sounds,
@@ -326,7 +516,7 @@ export async function fetchAllContent(
  * const item = await fetchSounds(1).then(items => items[0]);
  * const embeddingText = buildEmbeddingText(item);
  * console.log(embeddingText);
- * // "Pacific Ocean Waves | Calming ocean sounds for relaxation | Nature Sounds | ocean, waves, relaxation | White Noise"
+ * // "Pacific Ocean Waves | Calming ocean sounds | Nature Sounds | acoustic, alarm, cozy | Music | ocean, waves | Narrator Name | Tagline | About text"
  * ```
  */
 export function buildEmbeddingText(item: ContentItem): string {
@@ -336,7 +526,11 @@ export function buildEmbeddingText(item: ContentItem): string {
     item.category || '',
     ...(item.tags || []),
     ...(item.filterNames || []),
-    item.audioType || ''
+    ...(item.taxonomyConcepts || []),
+    item.audioType || '',
+    item.narrator || '',
+    item.tagline || '',
+    item.about || ''
   ].filter(Boolean); // Remove empty/null/undefined values
 
   return parts.join(' | ');
@@ -356,10 +550,11 @@ export function buildEmbeddingText(item: ContentItem): string {
  */
 export async function fetchEntry(entryId: string): Promise<ContentItem> {
   const config = getConfig();
-  const url = `${CONTENTFUL_API_URL}/spaces/${config.spaceId}/environments/${config.environment}/entries/${entryId}`;
+  const url = new URL(`${CONTENTFUL_API_URL}/spaces/${config.spaceId}/environments/${config.environment}/entries/${entryId}`);
+  url.searchParams.set('include', '1'); // Include linked entries
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       headers: {
         'Authorization': `Bearer ${config.accessToken}`,
         'Content-Type': 'application/json'
@@ -373,8 +568,10 @@ export async function fetchEntry(entryId: string): Promise<ContentItem> {
       );
     }
 
-    const data = await response.json() as ContentfulItem;
-    return transformItem(data);
+    const data = await response.json();
+    const taxonomyMap = await getTaxonomyConcepts();
+    // Single entry response doesn't have items array, but may have includes
+    return transformItem(data as ContentfulItem, data.includes, taxonomyMap);
   } catch (error) {
     if (error instanceof Error) {
       throw error;

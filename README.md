@@ -2,6 +2,26 @@
 
 A proof-of-concept semantic search system using VoyageAI embeddings and PostgreSQL, with an interactive test CLI and REST API.
 
+> 👋 **New to command line tools?** Check out [GETTING_STARTED.md](GETTING_STARTED.md) for a step-by-step beginner's guide!
+
+## 🤖 Need Help Setting This Up?
+
+If you have Claude Code, copy and paste this prompt to get assistance:
+
+```
+I need help setting up this embedding search project. Please:
+
+1. Check if I have Bun installed (if not, tell me how to install it)
+2. Help me create a .env file with the right format
+3. Walk me through installing dependencies with "bun install"
+4. Explain what "bun run setup:preview" does and run it for me
+5. When I'm ready, help me run "bun run setup" to generate embeddings
+6. Start the server with "bun run server"
+7. Show me how to test it with "bun run search"
+
+Go step by step, explain what each command does in simple terms, and check for errors along the way. Don't assume I know anything about terminal commands - explain everything clearly!
+```
+
 ## Overview
 
 This project validates semantic search capabilities by:
@@ -15,33 +35,51 @@ This project validates semantic search capabilities by:
 
 ## Quick Start
 
-### Option A: In-Memory Mode (Fastest - No Database Setup!)
+### 🚀 Try It Right Now (No Setup Required!)
 
-Perfect for quick testing without PostgreSQL:
+This repo includes pre-generated embeddings, so you can try semantic search **immediately** without any API keys:
 
 ```bash
 # 1. Install dependencies
 bun install
 
-# 2. Create .env file
-cp .env.example .env
+# 2. Start the server (uses included cache)
+bun run server
 
-# 3. Edit .env and add your API keys:
-#    - CONTENTFUL_ACCESS_TOKEN
-#    - VOYAGEAI_API_KEY
-#    - Ensure STORAGE_MODE=memory (this is the default in .env.example)
-
-# 4. Generate embeddings (stored in memory)
-bun run sync
-
-# 5. Start the API server
-bun run dev
-
-# 6. Test search in another terminal
-bun run test-search
+# 3. Try searching (in a new terminal)
+bun run search
 ```
 
-**Note:** In-memory mode stores embeddings in a JSON cache file (`.embeddings-cache.json`). Data persists across restarts - perfect for POC testing without database setup!
+That's it! No Contentful or VoyageAI API keys needed to demo the search.
+
+### Option A: In-Memory Mode (Fastest - No Database Setup!)
+
+Perfect for regenerating embeddings or working with your own Contentful data. Just 4 simple commands:
+
+```bash
+# 1. Install dependencies
+bun install
+
+# 2. Create .env file with your API keys
+cp .env.example .env
+# Edit .env and add CONTENTFUL_ACCESS_TOKEN and VOYAGEAI_API_KEY
+
+# 3. Preview what will happen (optional but recommended!)
+bun run setup:preview
+
+# 4. Set up the embeddings
+bun run setup
+
+# 5. Start the server
+bun run server
+
+# 6. Try searching (in a new terminal)
+bun run search
+```
+
+**Note:** This repo includes pre-cached data from Contentful (313 items: sounds, channels, and tracks for Hatch Sleep Clock) with voyage-3 embeddings already generated. This means you can demo the semantic search immediately without any API keys!
+
+The cache files (`.embeddings-cache.json` and `.contentful-cache.json`) are included in the repo for demo purposes. If you want to regenerate with your own Contentful data, see Option A below.
 
 ### Demo Search Terms
 
@@ -322,6 +360,18 @@ Either:
 ### Slow embedding generation
 
 This is normal. VoyageAI API calls typically take 50-100ms. For 200 items, expect 10-20 seconds total with rate limiting.
+
+## Simple Commands Reference
+
+These are the commands you'll use most often:
+
+| Command | What it does | When to use it |
+|---------|-------------|----------------|
+| `bun run setup:preview` | Show what will happen without making changes | Before your first setup |
+| `bun run setup` | Generate all the AI embeddings | First time, or when content changes |
+| `bun run setup:refresh` | Re-fetch from Contentful and regenerate | When Contentful content is updated |
+| `bun run server` | Start the search API | Every time you want to search |
+| `bun run search` | Try searching from the terminal | To test if everything works |
 
 ## What's Included
 

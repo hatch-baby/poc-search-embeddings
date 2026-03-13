@@ -80,7 +80,11 @@ function handleOptions(): Response {
   });
 }
 
-console.log('Starting Embedding Search API server...');
+console.log('');
+console.log('╔════════════════════════════════════════╗');
+console.log('║   Embedding Search API Server          ║');
+console.log('╚════════════════════════════════════════╝');
+console.log('');
 console.log(`Environment: ${isDevelopment ? 'development' : 'production'}`);
 
 // Validate required environment variables
@@ -170,11 +174,22 @@ const server = Bun.serve({
   }
 });
 
-console.log(`\n✅ Server running at http://${server.hostname}:${server.port}`);
-console.log('\nAvailable endpoints:');
-console.log(`   GET  http://${server.hostname}:${server.port}/health`);
-console.log(`   POST http://${server.hostname}:${server.port}/search`);
-console.log('\nPress Ctrl+C to stop the server.\n');
+console.log('');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log(`✅ Server is running!`);
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('');
+console.log(`🌐 URL: http://${server.hostname}:${server.port}`);
+console.log('');
+console.log('📍 Available endpoints:');
+console.log(`   GET  /health - Check server status`);
+console.log(`   POST /search - Search for content`);
+console.log('');
+console.log('💡 Try it out:');
+console.log('   Open a new terminal and run: bun run search');
+console.log('');
+console.log('⏹️  Press Ctrl+C to stop the server');
+console.log('');
 
 // Graceful shutdown
 process.on('SIGINT', () => {

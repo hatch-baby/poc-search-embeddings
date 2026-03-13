@@ -26,7 +26,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .eslintcache
 .cache
 *.tsbuildinfo
-.embeddings-cache.json
+# Note: .embeddings-cache.json and .contentful-cache.json are committed for demo purposes
+# This allows people to try the POC without setting up Contentful/VoyageAI
+# Uncomment below to ignore them locally:
+# .embeddings-cache.json
+# .contentful-cache.json
 
 # IntelliJ based IDEs
 .idea

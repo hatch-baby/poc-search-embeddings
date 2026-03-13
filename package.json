@@ -4,6 +4,11 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "setup": "bun src/sync/generate-embeddings.ts",
+    "setup:preview": "bun src/sync/generate-embeddings.ts --dry-run --limit 10",
+    "setup:refresh": "bun src/sync/generate-embeddings.ts --refresh-contentful",
+    "server": "bun src/api/server.ts",
+    "search": "bun scripts/test-search.ts",
     "sync": "bun src/sync/generate-embeddings.ts",
     "sync:dry-run": "bun src/sync/generate-embeddings.ts --dry-run",
     "dev": "bun --hot src/api/server.ts",
